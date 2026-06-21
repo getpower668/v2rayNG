@@ -49,7 +49,7 @@ jobs:
       if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
       run: |
         bash compile-hevtun.sh
-    
+
     - name: Save libhevtun
       if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
       uses: actions/cache/save@v5
@@ -84,11 +84,13 @@ jobs:
         java-version: '21'
 
     - name: Decode Keystore
+      if: ${{ secrets.APP_KEYSTORE_BASE64 != '' }}
+      continue-on-error: true
       uses: timheuer/base64-to-file@v2.0.0
       id: android_keystore
       with:
         fileName: "android_keystore.jks"
-        encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
+        encodedString: ${{ secrets.APP_KEYSTORE_BASE64 || '' }}
 
     - name: Build APK
       run: |
@@ -96,8 +98,18 @@ jobs:
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
         ./gradlew licenseFdroidReleaseReport
-        ./gradlew assembleRelease -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
-    
+        if [ -n "${{ secrets.APP_KEYSTORE_BASE64 }}" ] && [ -n "${{ steps.android_keystore.outputs.filePath }}" ]; then
+          echo "==> Signing with provided keystore"
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} \
+            -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
+        else
+          echo "==> No keystore secrets configured; building release APK with default (debug) signing"
+          ./gradlew assembleRelease
+        fi
+
     - name: Upload arm64-v8a APK
       uses: actions/upload-artifact@v7
       if: ${{  success() }}
