@@ -84,24 +84,26 @@ jobs:
         java-version: '21'
 
     - name: Decode Keystore
-      if: ${{ secrets.APP_KEYSTORE_BASE64 != '' }}
       continue-on-error: true
       uses: timheuer/base64-to-file@v2.0.0
       id: android_keystore
       with:
         fileName: "android_keystore.jks"
-        encodedString: ${{ secrets.APP_KEYSTORE_BASE64 || '' }}
+        encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
 
     - name: Build APK
+      env:
+        KEYSTORE_PATH: ${{ steps.android_keystore.outputs.filePath }}
+        KEYSTORE_B64: ${{ secrets.APP_KEYSTORE_BASE64 }}
       run: |
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
         ./gradlew licenseFdroidReleaseReport
-        if [ -n "${{ secrets.APP_KEYSTORE_BASE64 }}" ] && [ -n "${{ steps.android_keystore.outputs.filePath }}" ]; then
+        if [ -n "${KEYSTORE_B64}" ] && [ -n "${KEYSTORE_PATH}" ] && [ -f "${KEYSTORE_PATH}" ]; then
           echo "==> Signing with provided keystore"
           ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} \
+            -Pandroid.injected.signing.store.file=${KEYSTORE_PATH} \
             -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
