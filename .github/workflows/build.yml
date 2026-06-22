@@ -108,8 +108,20 @@ jobs:
             -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
         else
-          echo "==> No keystore secrets configured; building release APK with default (debug) signing"
-          ./gradlew assembleRelease
+          echo "==> No keystore secrets configured; generating temporary keystore for self-signing"
+          AUTO_KEYSTORE=/tmp/vpn-auto.keystore
+          $JAVA_HOME/bin/keytool -genkeypair -noprompt \
+            -keystore $AUTO_KEYSTORE \
+            -alias vpnauto \
+            -keyalg RSA -keysize 2048 -validity 10950 \
+            -storepass vpnauto2026 -keypass vpnauto2026 \
+            -dname "CN=VPN-Auto, OU=getpower668, O=Personal, C=CN"
+          echo "==> Auto-generated keystore: $AUTO_KEYSTORE ($(stat -c%s $AUTO_KEYSTORE 2>/dev/null || stat -f%z $AUTO_KEYSTORE)B)"
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=${AUTO_KEYSTORE} \
+            -Pandroid.injected.signing.store.password=vpnauto2026 \
+            -Pandroid.injected.signing.key.alias=vpnauto \
+            -Pandroid.injected.signing.key.password=vpnauto2026
         fi
 
     - name: Upload arm64-v8a APK
